@@ -1,6 +1,7 @@
 import numpy as np 
 import pandas as pd
 import matplotlib.pyplot as plt
+from numpy.f2py.auxfuncs import throw_error
 
 
 # The class is to solve an Ergodic Control Problem for classical market makiing model
@@ -180,7 +181,7 @@ class Agent:
 
         self.objective = np.zeros(self.length)
 
-    def learning(self, sigma, kappa_true):
+    def learning(self, sigma, kappa_true, fill_intensity="exponential", a_true=0, b_true=0):
         """
         Simulate the learning process
         """
@@ -214,8 +215,13 @@ class Agent:
             self.postselldepth[idx] = sell_depth
             self.postbuydepth[idx] = buy_depth
 
-            prob_sellside = np.exp(-sell_depth * kappa_true)
-            prob_buyside = np.exp(-buy_depth * kappa_true)
+            if (fill_intensity == "exponential"):
+                prob_sellside = np.exp(-sell_depth * kappa_true)
+                prob_buyside = np.exp(-buy_depth * kappa_true)
+            elif (fill_intensity == "logistic"):
+                prob_sellside = 1 / (1 + np.exp(a_true + b_true * sell_depth))
+                prob_buyside = 1 / (1 + np.exp(a_true + b_true * buy_depth))
+
             prob_sellside = 1 if prob_sellside > 1 else prob_sellside
             prob_buyside = 1 if prob_buyside > 1 else prob_buyside
 
