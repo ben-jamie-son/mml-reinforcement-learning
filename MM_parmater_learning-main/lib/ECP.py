@@ -181,7 +181,7 @@ class Agent:
 
         self.objective = np.zeros(self.length)
 
-    def learning(self, sigma, kappa_true, fill_intensity="exponential", a_true=0, b_true=0):
+    def learning(self, sigma, kappa_true, fill_intensity, a_true, b_true):
         """
         Simulate the learning process
         """
@@ -215,10 +215,10 @@ class Agent:
             self.postselldepth[idx] = sell_depth
             self.postbuydepth[idx] = buy_depth
 
-            if (fill_intensity == "exponential"):
+            if fill_intensity == "exponential":
                 prob_sellside = np.exp(-sell_depth * kappa_true)
                 prob_buyside = np.exp(-buy_depth * kappa_true)
-            elif (fill_intensity == "logistic"):
+            elif fill_intensity == "logistic":
                 prob_sellside = 1 / (1 + np.exp(a_true + b_true * sell_depth))
                 prob_buyside = 1 / (1 + np.exp(a_true + b_true * buy_depth))
 
@@ -340,6 +340,24 @@ class Agent:
     def regret(self, kappa_true):
         """
         Simualte the achieved regret
+        """
+        gamma = ErgodicCP(
+            lambda_buy=self.lambda_buy,
+            lambda_sell=self.lambda_sell,
+            q_upper=self.q_upper,
+            q_lower=self.q_lower,
+            phi=self.phi,
+            kappa=kappa_true,
+        ).EConst
+
+        reg = gamma*self.ts - self.objective
+        return reg
+
+    def regret_logistic(self, kappa_true):
+        """
+        Simulate the achieved regret when using the logistic fills
+        :param kappa_true:
+        :return: reg
         """
         gamma = ErgodicCP(
             lambda_buy=self.lambda_buy,
