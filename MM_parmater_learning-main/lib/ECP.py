@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy.f2py.auxfuncs import throw_error
 
 
-# The class is to solve an Ergodic Control Problem for classical market makiing model
+# The class is to solve an Ergodic Control Problem for classical market making model
 class ErgodicCP:
     def __init__(
         self,
@@ -120,6 +120,139 @@ class ErgodicCP:
         plt.title("Optimal Strategy $\delta^{\pm, *}(q)$ for Ergodic Control Problem")
         plt.legend()
         plt.show()  
+
+
+
+
+
+
+# The class is to approximately solve an Ergodic Control Problem for classical market making model with logistic fill intensities
+class ErgodicCP_logisticfill:
+    def __init__(
+        self,
+        lambda_buy, 
+        lambda_sell,
+        q_upper,
+        q_lower,
+        phi,
+        kappa,
+    ):
+        self.lambda_buy = lambda_buy
+        self.lambda_sell = lambda_sell
+        self.q_upper = q_upper
+        self.q_lower = q_lower
+        self.phi = phi 
+        self.a = a
+        sellf.b = b
+        self.T = T
+
+    @property
+    def delta_optimal(self):
+        from scipy.special import lambertw
+        A = np.zeros([self.q_upper-self.q_lower+1, self.q_upper-self.q_lower+1])   
+
+        for i in range(self.q_upper-self.q_lower+1):
+            # j denotes the row number
+            for j in range(self.q_upper-self.q_lower+1):
+                if j == i:
+                    # q = q_upper - j
+                    A[j,i] = - self.phi*self.kappa*(self.q_upper-j)**2
+                elif j == i-1:
+                    A[j,i] = self.lambda_buy*np.e**(-1)
+                elif j == i+1:
+                    A[j,i] = self.lambda_sell*np.e**(-1)
+
+        return A
+
+    @property
+    def EConst(self):
+        import scipy.linalg
+        A = self.A
+        evalues, _ = scipy.linalg.eig(A)
+        gamma = np.real(max(evalues)) / self.kappa
+        return gamma
+    
+    @property
+    def CoefMatrix(self):
+        # Let C denote a square matrix
+        C = np.zeros([self.q_upper-self.q_lower+1, self.q_upper-self.q_lower+1])
+
+        # Notice we assume kappa_buy = kappa_sell in the model
+        # i denotes the column number
+        for i in range(self.q_upper-self.q_lower+1):
+            # j denotes the row number
+            for j in range(self.q_upper-self.q_lower+1):
+                if j == i:
+                    # q = q_upper - j
+                    C[j,i] = - self.kappa*(self.phi*(self.q_upper-j)**2 + self.EConst)
+                elif j == i-1:
+                    C[j,i] = self.lambda_buy*np.e**(-1)
+                elif j == i+1:
+                    C[j,i] = self.lambda_sell*np.e**(-1)
+
+        return C
+
+    def solu_HomoEQ(self, C):
+        # find the eigenvalues and eigenvector of C(transpose).C
+        e_vals, e_vecs = np.linalg.eig(np.dot(C.T, C))  
+        # extract the eigenvector (column) associated with the minimum eigenvalue
+        return e_vecs[:, np.argmin(e_vals)]
+
+    @property
+    def ValueFunction(self):
+        C = self.CoefMatrix
+        solu = self.solu_HomoEQ(C)
+        if solu[0] < 0:
+            solu = -1 * solu
+        
+        solu = np.log(solu) / self.kappa
+        return solu
+
+
+    @property
+    def EControl(self):
+        C = self.CoefMatrix
+        solu = np.abs(self.solu_HomoEQ(C))
+        # if solu[0] < 0:
+        #     solu = -1 * solu
+        
+        solu = np.log(solu) / self.kappa
+
+        delta_buy = np.zeros(self.q_upper - self.q_lower)
+        delta_sell = np.zeros(self.q_upper - self.q_lower)
+
+        for i in range(self.q_upper-self.q_lower):
+            # q = q_upper - i
+            delta_sell[i] = 1/self.kappa + solu[i] - solu[i+1]
+            # delta_sell[i-1] = 1/self.kappa - solu[i-1] + solu[i] (original)
+        for i in range(self.q_upper-self.q_lower):
+            # q = q_upper - 1 - j
+            delta_buy[i] = 1/self.kappa + solu[i+1] - solu[i]
+            # delta_buy[i] = 1/self.kappa + solu[i] - solu[i+1] (original)
+        return delta_sell[::-1], delta_buy[::-1]
+    
+    @property
+    def plot_EControl(self):
+        import matplotlib.pyplot as plt
+
+        inventory = np.arange(self.q_lower, self.q_upper+1, 1)
+        delta_sell, delta_buy = self.EControl
+
+        plt.plot(inventory[1:], delta_sell, 'o',label='sell depth $\delta^{+}$')
+        plt.plot(inventory[:-1], delta_buy, 'o',label='buy depth $\delta^{-}$')
+        plt.xlabel("q")
+        plt.ylabel('$\delta^{\pm}(\$)$')
+        plt.title("Optimal Strategy $\delta^{\pm, *}(q)$ for Ergodic Control Problem")
+        plt.legend()
+        plt.show()  
+
+
+
+
+
+
+
+
 
 
 # The class is to simulate the agent's parameter learning
