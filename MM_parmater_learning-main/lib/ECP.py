@@ -135,7 +135,11 @@ class ErgodicCP_logisticfill:
         q_upper,
         q_lower,
         phi,
-        kappa,
+        a,
+        b,
+        alpha,
+        x,
+        S
     ):
         self.lambda_buy = lambda_buy
         self.lambda_sell = lambda_sell
@@ -144,107 +148,108 @@ class ErgodicCP_logisticfill:
         self.phi = phi 
         self.a = a
         sellf.b = b
-        self.T = T
+        self.alpha = alpha
+        self.x = x
+        self.S = S
+
+        self.q_grid = np.arange(q_lower,q_upper+1)
 
     @property
-    def delta_optimal(self):
+    def Lambert_term(self, h_func):
         from scipy.special import lambertw
-        A = np.zeros([self.q_upper-self.q_lower+1, self.q_upper-self.q_lower+1])   
 
-        for i in range(self.q_upper-self.q_lower+1):
-            # j denotes the row number
-            for j in range(self.q_upper-self.q_lower+1):
-                if j == i:
-                    # q = q_upper - j
-                    A[j,i] = - self.phi*self.kappa*(self.q_upper-j)**2
-                elif j == i-1:
-                    A[j,i] = self.lambda_buy*np.e**(-1)
-                elif j == i+1:
-                    A[j,i] = self.lambda_sell*np.e**(-1)
+        b = self.b
+        a = self.a 
 
-        return A
+        z = np.exp(b * h_func - a - 1)
 
+        W = lambertw(z).real 
+
+        # numerator and denominator of fraction containing W and delta optimal in HJB
+        num = W + 1 
+        den = 1 + np.exp(a + W + 1 - b * h_func)
+
+        return num / den
+        
     @property
-    def EConst(self):
-        import scipy.linalg
-        A = self.A
-        evalues, _ = scipy.linalg.eig(A)
-        gamma = np.real(max(evalues)) / self.kappa
-        return gamma
+    def HJB(self, t, h):
+        dhdt = np.zeros_like(h)
+
+        # define vector of HJB equation for each q
+        for i, q in enumerate(self.q_grid):
+            RHS = self.phi * q**2
+
+            if q > self.q_lower:
+                RHS -= (self.lambda_sell / self.b) * self.Lambert_term( h[i-1] - h[i] )
+        
+            if q < self.q_upper:
+                RHS -= (self.lambda_buy / self.b) * self.Lambert_term( h[i+1] - h[i] )
+
+            dhdt[i] = RHS
+
+        return dhdt
     
     @property
-    def CoefMatrix(self):
-        # Let C denote a square matrix
-        C = np.zeros([self.q_upper-self.q_lower+1, self.q_upper-self.q_lower+1])
+    def terminal_condition(self):
+        return - self.alpha * self.q_grid**2
+        
+    @property
+    def solve_HJB(self, T, N = 200):
+        from scipy.integrate import solve_ivp
+        t_eval = np.linspace(T, 0, N)
 
-        # Notice we assume kappa_buy = kappa_sell in the model
-        # i denotes the column number
-        for i in range(self.q_upper-self.q_lower+1):
-            # j denotes the row number
-            for j in range(self.q_upper-self.q_lower+1):
-                if j == i:
-                    # q = q_upper - j
-                    C[j,i] = - self.kappa*(self.phi*(self.q_upper-j)**2 + self.EConst)
-                elif j == i-1:
-                    C[j,i] = self.lambda_buy*np.e**(-1)
-                elif j == i+1:
-                    C[j,i] = self.lambda_sell*np.e**(-1)
+        # solve backwards to solve for terminal condition
+        sol = solve_ivp(
+            self.HJB,
+            (T, 0),
+            self.terminal_condition(),
+            t_eval = t_eval,
+            method="RK45"
+        )
 
-        return C
-
-    def solu_HomoEQ(self, C):
-        # find the eigenvalues and eigenvector of C(transpose).C
-        e_vals, e_vecs = np.linalg.eig(np.dot(C.T, C))  
-        # extract the eigenvector (column) associated with the minimum eigenvalue
-        return e_vecs[:, np.argmin(e_vals)]
+        return sol.t, sol.y, self.q_grid
 
     @property
-    def ValueFunction(self):
-        C = self.CoefMatrix
-        solu = self.solu_HomoEQ(C)
-        if solu[0] < 0:
-            solu = -1 * solu
+    def Ergodic_limit(self, T_start=10, T_inc=10, N_per_t=20, tol=1e-10):
+
+        T = T_start
+
+        # value based on the ansatz
+        sol = self.solve_HJB(T, N = T * N_per_t)
+        value = self.x + self.q_grid*self.S + sol[1]
+
+        T_eval, ergodic_values = [T], [ value[-1]/T ] 
+
+        # iterate until ergodic value for each q changes by less than tolerance
+        while np.min( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol:
+            T += T_inc
+            sol = self.solve_HJB(T, N = T*N_per_t)
+            value = x + self.q_grid*self.S + sol[1]
+
+            ergodic_values.append( value[-1] / T)
+            T_eval.append(T)
+            
+
+        return T_eval, ergodic_values, self.q_grid
+            
+            
         
-        solu = np.log(solu) / self.kappa
-        return solu
-
-
-    @property
-    def EControl(self):
-        C = self.CoefMatrix
-        solu = np.abs(self.solu_HomoEQ(C))
-        # if solu[0] < 0:
-        #     solu = -1 * solu
         
-        solu = np.log(solu) / self.kappa
-
-        delta_buy = np.zeros(self.q_upper - self.q_lower)
-        delta_sell = np.zeros(self.q_upper - self.q_lower)
-
-        for i in range(self.q_upper-self.q_lower):
-            # q = q_upper - i
-            delta_sell[i] = 1/self.kappa + solu[i] - solu[i+1]
-            # delta_sell[i-1] = 1/self.kappa - solu[i-1] + solu[i] (original)
-        for i in range(self.q_upper-self.q_lower):
-            # q = q_upper - 1 - j
-            delta_buy[i] = 1/self.kappa + solu[i+1] - solu[i]
-            # delta_buy[i] = 1/self.kappa + solu[i] - solu[i+1] (original)
-        return delta_sell[::-1], delta_buy[::-1]
     
     @property
-    def plot_EControl(self):
+    def plot_EControl_logisticfill(self):
         import matplotlib.pyplot as plt
 
-        inventory = np.arange(self.q_lower, self.q_upper+1, 1)
-        delta_sell, delta_buy = self.EControl
+        # inventory = np.arange(self.q_lower, self.q_upper+1, 1)
+        # delta_sell, delta_buy = self.EControl
 
-        plt.plot(inventory[1:], delta_sell, 'o',label='sell depth $\delta^{+}$')
-        plt.plot(inventory[:-1], delta_buy, 'o',label='buy depth $\delta^{-}$')
-        plt.xlabel("q")
-        plt.ylabel('$\delta^{\pm}(\$)$')
-        plt.title("Optimal Strategy $\delta^{\pm, *}(q)$ for Ergodic Control Problem")
-        plt.legend()
-        plt.show()  
+        # plt.plot(inventory[1:], delta_sell, 'o',label='sell depth $\delta^{+}$')
+        # plt.plot(inventory[:-1], delta_buy, 'o',label='buy depth $\delta^{-}$')
+        # plt.xlabel("q")
+        # plt.ylabel('$\delta^{\pm}(\$)$')
+        # plt.title("Optimal Strategy $\delta^{\pm, *}(q)$ for Ergodic Control Problem")
+        # plt.legend()
+        # plt.show()  
 
 
 
