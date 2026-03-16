@@ -147,14 +147,13 @@ class ErgodicCP_logisticfill:
         self.q_lower = q_lower
         self.phi = phi 
         self.a = a
-        sellf.b = b
+        self.b = b
         self.alpha = alpha
         self.x = x
         self.S = S
 
         self.q_grid = np.arange(q_lower,q_upper+1)
 
-    @property
     def Lambert_term(self, h_func):
         from scipy.special import lambertw
 
@@ -170,8 +169,7 @@ class ErgodicCP_logisticfill:
         den = 1 + np.exp(a + W + 1 - b * h_func)
 
         return num / den
-        
-    @property
+
     def HJB(self, t, h):
         dhdt = np.zeros_like(h)
 
@@ -192,8 +190,7 @@ class ErgodicCP_logisticfill:
     @property
     def terminal_condition(self):
         return - self.alpha * self.q_grid**2
-        
-    @property
+
     def solve_HJB(self, T, N = 200):
         from scipy.integrate import solve_ivp
         t_eval = np.linspace(T, 0, N)
@@ -202,31 +199,42 @@ class ErgodicCP_logisticfill:
         sol = solve_ivp(
             self.HJB,
             (T, 0),
-            self.terminal_condition(),
+            self.terminal_condition,
             t_eval = t_eval,
             method="RK45"
         )
 
         return sol.t, sol.y, self.q_grid
 
-    @property
-    def Ergodic_limit(self, T_start=10, T_inc=10, N_per_t=20, tol=1e-10):
+    def Ergodic_limit(self, T_start=10, T_inc=100, N_per_t=20, tol=1e-4):
 
         T = T_start
 
         # value based on the ansatz
-        sol = self.solve_HJB(T, N = T * N_per_t)
-        value = self.x + self.q_grid*self.S + sol[1]
+        sol_t, sol_y, _ = self.solve_HJB(T, N = T * N_per_t)
+        value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
-        T_eval, ergodic_values = [T], [ value[-1]/T ] 
+        T_eval = [T]
+        ergodic_values = [value[:,-1] / T]
+
+        T += T_inc
+
+        sol_t, sol_y, _ = self.solve_HJB(T, N = T * N_per_t)
+        value = self.x + (self.q_grid[:, None]*self.S) + sol_y
+
+        ergodic_values.append(value[:,-1] / T)
+        T_eval.append(T)
 
         # iterate until ergodic value for each q changes by less than tolerance
-        while np.min( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol:
+        while (np.max( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol and T<=1600):
             T += T_inc
+            difference = max(abs(ergodic_values[-1] - ergodic_values[-2]))
+            print("T:"+ str(T))
+            print("Difference:" + str(difference))
             sol = self.solve_HJB(T, N = T*N_per_t)
-            value = x + self.q_grid*self.S + sol[1]
+            value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
-            ergodic_values.append( value[-1] / T)
+            ergodic_values.append(value[:,-1] / T)
             T_eval.append(T)
             
 
@@ -250,12 +258,6 @@ class ErgodicCP_logisticfill:
         # plt.title("Optimal Strategy $\delta^{\pm, *}(q)$ for Ergodic Control Problem")
         # plt.legend()
         # plt.show()  
-
-
-
-
-
-
 
 
 
