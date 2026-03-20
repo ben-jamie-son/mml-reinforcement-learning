@@ -208,7 +208,7 @@ class ErgodicCP_logisticfill:
 
         return sol.t, sol.y, self.q_grid
 
-    def Ergodic_limit(self, T_start=10, T_inc=100, N_per_t=20, tol=1e-4):
+    def Ergodic_limit(self, T_start=10, T_inc=100, N_per_t=50, tol=1e-4):
 
         T = T_start
 
@@ -228,7 +228,7 @@ class ErgodicCP_logisticfill:
         T_eval.append(T)
 
         # iterate until ergodic value for each q changes by less than tolerance
-        while (np.max( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol and T<=2000):
+        while (np.max( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol and T<=4000):
             T += T_inc
             difference = max(abs(ergodic_values[-1] - ergodic_values[-2]))
             print("T:"+ str(T))
