@@ -157,31 +157,33 @@ class ErgodicCP_logisticfill:
     def Lambert_term(self, h_func):
         from scipy.special import lambertw
 
+        a = self.a
         b = self.b
-        a = self.a 
+        c = b* h_func-1
 
-        z = np.exp(b * h_func - a - 1)
 
-        W = lambertw(z).real 
+        z = np.exp(-(a-c))
 
-        # numerator and denominator of fraction containing W and delta optimal in HJB
-        num = W + 1 
-        den = 1 + np.exp(a + W + 1 - b * h_func)
+        W = lambertw(z).real
 
-        return num / den
+        delta = (W - c) / b
+
+        return W, delta
 
     def HJB(self, t, h):
-        dhdt = np.zeros_like(h)
+        dhdt = np.zeros(len(h))
 
         # define vector of HJB equation for each q
         for i, q in enumerate(self.q_grid):
             RHS = self.phi * q**2
 
             if q > self.q_lower:
-                RHS -= (self.lambda_sell / self.b) * self.Lambert_term( h[i-1] - h[i] )
+                term, delta  = self.Lambert_term(h[i-1]  - h[i])
+                RHS -= (self.lambda_sell / self.b) * (term+1)/(1 + np.exp(self.a+self.b*delta))
         
             if q < self.q_upper:
-                RHS -= (self.lambda_buy / self.b) * self.Lambert_term( h[i+1] - h[i] )
+                term, delta = self.Lambert_term(h[i + 1] - h[i])
+                RHS -= (self.lambda_buy / self.b) * (term+1)/(1 + np.exp(self.a+self.b*delta))
 
             dhdt[i] = RHS
 
@@ -226,22 +228,22 @@ class ErgodicCP_logisticfill:
         T_eval.append(T)
 
         # iterate until ergodic value for each q changes by less than tolerance
-        while (np.max( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol and T<=1600):
+        while (np.max( abs(ergodic_values[-1] - ergodic_values[-2]) ) >= tol and T<=2000):
             T += T_inc
             difference = max(abs(ergodic_values[-1] - ergodic_values[-2]))
             print("T:"+ str(T))
             print("Difference:" + str(difference))
-            sol = self.solve_HJB(T, N = T*N_per_t)
+            sol_t, sol_y, _ = self.solve_HJB(T, N = T*N_per_t)
             value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
             ergodic_values.append(value[:,-1] / T)
             T_eval.append(T)
-            
+
 
         return T_eval, ergodic_values, self.q_grid
-            
-            
-        
+
+
+
         
     
     @property
@@ -489,26 +491,18 @@ class Agent:
             phi=self.phi,
             kappa=kappa_true,
         ).EConst
-
+        print(gamma)
         reg = gamma*self.ts - self.objective
         return reg
 
-    def regret_logistic(self, kappa_true):
+    def regret_logistic(self, logistic_gamma):
         """
         Simulate the achieved regret when using the logistic fills
-        :param kappa_true:
+        :param logistic_gamma:
         :return: reg
         """
-        gamma = ErgodicCP(
-            lambda_buy=self.lambda_buy,
-            lambda_sell=self.lambda_sell,
-            q_upper=self.q_upper,
-            q_lower=self.q_lower,
-            phi=self.phi,
-            kappa=kappa_true,
-        ).EConst
 
-        reg = gamma*self.ts - self.objective
+        reg = logistic_gamma*self.ts - self.objective
         return reg
 
     def Objective_Function(self):
