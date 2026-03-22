@@ -193,7 +193,7 @@ class ErgodicCP_logisticfill:
     def terminal_condition(self):
         return - self.alpha * self.q_grid**2
 
-    def solve_HJB(self, T, N = 200):
+    def solve_HJB(self, T, N):
         from scipy.integrate import solve_ivp
         t_eval = np.linspace(T, 0, N)
 
@@ -213,7 +213,7 @@ class ErgodicCP_logisticfill:
         T = T_start
 
         # value based on the ansatz
-        sol_t, sol_y, _ = self.solve_HJB(T, N = T * N_per_t)
+        sol_t, sol_y, _ = self.solve_HJB(T, N=T * N_per_t)
         value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
         T_eval = [T]
@@ -221,7 +221,7 @@ class ErgodicCP_logisticfill:
 
         T += T_inc
 
-        sol_t, sol_y, _ = self.solve_HJB(T, N = T * N_per_t)
+        sol_t, sol_y, _ = self.solve_HJB(T, N=T * N_per_t)
         value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
         ergodic_values.append(value[:,-1] / T)
@@ -233,7 +233,7 @@ class ErgodicCP_logisticfill:
             difference = max(abs(ergodic_values[-1] - ergodic_values[-2]))
             print("T:"+ str(T))
             print("Difference:" + str(difference))
-            sol_t, sol_y, _ = self.solve_HJB(T, N = T*N_per_t)
+            sol_t, sol_y, _ = self.solve_HJB(T, N=T * N_per_t)
             value = self.x + (self.q_grid[:, None]*self.S) + sol_y
 
             ergodic_values.append(value[:,-1] / T)
@@ -491,7 +491,6 @@ class Agent:
             phi=self.phi,
             kappa=kappa_true,
         ).EConst
-        print(gamma)
         reg = gamma*self.ts - self.objective
         return reg
 
