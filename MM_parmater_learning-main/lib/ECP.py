@@ -172,6 +172,7 @@ class ErgodicCP_logisticfill:
 
     def HJB(self, t, h):
         dhdt = np.zeros(len(h))
+        from scipy.special import expit
 
         # define vector of HJB equation for each q
         for i, q in enumerate(self.q_grid):
@@ -179,11 +180,13 @@ class ErgodicCP_logisticfill:
 
             if q > self.q_lower:
                 term, delta  = self.Lambert_term(h[i-1]  - h[i])
-                RHS -= (self.lambda_sell / self.b) * (term+1)/(1 + np.exp(self.a+self.b*delta))
+                prob = expit(-(self.a + self.b * delta))
+                RHS -= (self.lambda_sell / self.b) * (term+1)/prob
         
             if q < self.q_upper:
                 term, delta = self.Lambert_term(h[i + 1] - h[i])
-                RHS -= (self.lambda_buy / self.b) * (term+1)/(1 + np.exp(self.a+self.b*delta))
+                prob = expit(-(self.a + self.b * delta))
+                RHS -= (self.lambda_buy / self.b) * (term+1)/prob
 
             dhdt[i] = RHS
 
