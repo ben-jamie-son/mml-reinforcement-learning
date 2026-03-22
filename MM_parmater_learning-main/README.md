@@ -1,3 +1,2 @@
 # MM_parmater_learning
-Implement the simulation of the achieved regret of a regularised-maximum-likelihood-estimator for the price sensitivity parameter $\kappa$ in the market making model. 
-
+Code for the model misspecification tests and ergodic constant numerical approximation. Regret_Sim looks at simulating order limits with exponetial and logistic fill intensities and comparinng model performance, while Comparison_Sim calculates the ergodic constant w.r.t the logistic intensities and analyses ergodicity of the model misspecification.
